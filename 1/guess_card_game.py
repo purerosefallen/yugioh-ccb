@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
 import sqlite3
 import pandas as pd
 import random
@@ -7,6 +7,7 @@ from flask import jsonify
 app = Flask(__name__)
 db = None
 target_row = None
+app.secret_key = "你自己的随机 Secret Key"
 
 # --- 与原 CLI 版本相同的配置 ---
 ATTR_MAP = {
@@ -85,28 +86,52 @@ def compare_tags(guess_tags, answer_tags):
             return f"{val1} ✅" if val1 == val2 else f"{val1} ❌"
     return {key: cmp(guess_tags[key], answer_tags[key]) for key in guess_tags}
 
+def filter_db(mode):
+    if mode == 'monster':
+        # 怪兽卡 & 排除通常怪兽
+        return db[(db['type'] & 0x1 > 0) & (db['type'] & 0x10 == 0)]
+    if mode == 'spell':
+        return db[db['type'] & 0x2 > 0]
+    if mode == 'trap':
+        return db[db['type'] & 0x4 > 0]
+    # all
+    return db
+
 @app.route("/", methods=["GET", "POST"])
+def start():
+    """游戏开始前，选择卡牌范围"""
+    if request.method == "POST":
+        mode = request.form.get("mode")
+        session['mode'] = mode
+        # 随机选一个 target_id 存入 session
+        pool = filter_db(mode)
+        session['target_id'] = int(pool.sample(1).index[0])
+        return redirect(url_for("index"))
+    return render_template("start.html")
+
+@app.route("/game", methods=["GET", "POST"])
 def index():
-    global target_row
     feedback = None
-    if target_row is None:
-        monster_df = db[(db["type"] & 0x1) != 0]
-        target_row = monster_df.sample(1).iloc[0]
+    mode = session.get('mode')
+    if not mode:
+        return redirect(url_for("start"))
+    filtered = filter_db(mode)
+    target = db.loc[session['target_id']]
 
     if request.method == "POST":
         user_input = request.form.get("guess", "").strip()
-        match = db[db["name"].str.contains(user_input, case=False, na=False)]
+        match = filtered[filtered["name"].str.contains(user_input, case=False, na=False)]
 
         if match.empty:
             feedback = {"error": f"未找到包含“{user_input}”的卡片。"}
         else:
             guess = match.iloc[0]
-            if guess.name == target_row.name:
+            if guess.name == target.name:
                 feedback = {"success": f"🎉 恭喜你猜中了！答案就是【{guess['name']}】"}
                 target_row = None
             else:
                 feedback = {
-                    "compare": compare_tags(card_to_tags(guess), card_to_tags(target_row)),
+                    "compare": compare_tags(card_to_tags(guess), card_to_tags(target)),
                     "guess_name": guess['name']
                 }
 
