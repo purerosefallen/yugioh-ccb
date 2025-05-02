@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>🎴 猜卡游戏</title>
+  <style>
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      margin: 2px 4px 2px 0;
+      border-radius: 12px;
+      font-size: 0.9em;
+      font-weight: 500;
+      vertical-align: middle;
+    }
+    .tag-green   { background: #c8e6c9; color: #1b5e20; }
+    .tag-yellow  { background: #fff9c4; color: #665c00; }
+    .tag-gray    { background: #e0e0e0; color: #424242; }
+    .tag-red     { background: #ffcdd2; color: #b71c1c; }
+    body { font-family: sans-serif; margin: 2em; background: #f5f5f5; }
+    input[type="text"] { width: 400px; padding: 10px; font-size: 16px; }
+    ul#suggestions {
+      list-style: none; margin: 0; padding: 0; width: 400px;
+      border: 1px solid #ccc; background: #fff;
+      position: absolute; z-index: 10; max-height: 200px; overflow-y: auto;
+    }
+    ul#suggestions li { padding: 8px; cursor: pointer; }
+    ul#suggestions li:hover { background-color: #f0f0f0; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+    th, td {
+      border: 1px solid #999; padding: 6px 10px; text-align: center;
+    }
+    .match { background-color: #c8e6c9; }
+    .partial { background-color: #fff9c4; }
+    .mismatch { background-color: #ffcdd2; }
+    button { margin-left: 8px; }
+
+  </style>
+</head>
+<body>
+  <h1>🎴 猜卡游戏</h1>
+
+  <!-- 历史猜测 -->
+  {% if history %}
+    <h2>历史猜测</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>卡名</th><th>攻击</th><th>守备</th><th>等级</th><th>刻度</th>
+          <th>类型</th><th>属性</th><th>种族</th><th>效果标签</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in history %}
+        <tr>
+          <td>{{ entry.guess_name }}</td>
+          <td>{{ entry.compare['攻击']|safe }}</td>
+          <td>{{ entry.compare['守备']|safe }}</td>
+          <td>{{ entry.compare['等级']|safe }}</td>
+          <td>{{ entry.compare['刻度']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['类型']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['属性']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['种族']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['效果标签']|safe }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+
+  <!-- 输入与按钮 -->
+  <form method="POST" autocomplete="off" style="position: relative; margin-top: 1em;">
+    <input type="text" id="guess" name="guess" placeholder="输入卡名" oninput="fetchSuggestions()" onfocus="fetchSuggestions()" />
+    <!-- 三个动作按钮 -->
+    <button type="submit" name="action" value="guess">提交猜测</button>
+    <button type="submit" name="action" value="surrender">投降</button>
+    <button type="submit" name="action" value="restart">重新开始</button>
+    <ul id="suggestions" hidden></ul>
+  </form>
+
+  <!-- 本次反馈 -->
+  {% if feedback %}
+    {% if feedback.error %}
+      <p style="color:red; font-weight:bold;">{{ feedback.error }}</p>
+    {% elif feedback.success %}
+      <p style="color:green; font-weight:bold;">{{ feedback.success }}</p>
+    {% elif feedback.giveup %}
+      <p style="color:blue; font-weight:bold;">💡 放弃了！正确答案是：{{ feedback.answer }}</p>
+    {% elif feedback.compare %}
+      {% if feedback.hint %}
+        <p style="color:blue;">💡 提示：卡名中包含 “{{ feedback.hint }}” 这个字</p>
+      {% endif %}
+      <h3>你猜的是：<strong>{{ feedback.guess_name }}</strong></h3>
+      <table>
+        <thead><tr><th>属性</th><th>结果</th></tr></thead>
+        <tbody>
+        {% for k,v in feedback.compare.items() %}
+          <tr><td>{{ k }}</td><td>{{ v|safe }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  {% endif %}
+
+  <script>
+    async function fetchSuggestions() {
+      const input = document.getElementById("guess");
+      const sug   = document.getElementById("suggestions");
+      const kw    = input.value.trim();
+      if (!kw) { sug.innerHTML=''; sug.hidden=true; return; }
+      const resp = await fetch(`/suggest?q=${encodeURIComponent(kw)}`);
+      const names = await resp.json();
+      sug.innerHTML = '';
+      if (!names.length) { sug.hidden = true; return; }
+      for (const name of names) {
+        const li = document.createElement('li');
+        li.textContent = name;
+        li.onclick = () => { input.value = name; sug.hidden = true; };
+        sug.appendChild(li);
+      }
+      sug.hidden = false;
+    }
+    document.addEventListener('click', e => {
+      if (!e.target.closest('#guess')) {
+        document.getElementById("suggestions").hidden = true;
+      }
+    });
+  </script>
+</body>
+</html>
