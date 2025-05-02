@@ -34,11 +34,76 @@
     .partial { background-color: #fff9c4; }
     .mismatch { background-color: #ffcdd2; }
     button { margin-left: 8px; }
+    .hint-box {
+      margin: 1em 0;
+      padding: 0.5em;
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      border-radius: 4px;
+      color: #856404;
+    }
+    .arrow-grid {
+      display: grid;
+      grid-template-rows: repeat(3, 1.5em);
+      grid-template-columns: repeat(3, 1.5em);
+      gap: 2px;
+    }
+    .arrow-cell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .arrow-cell.empty {
+      border: none;
+      background: transparent;
+    }
+    .arrow-cell.cell-green { background: #c8e6c9; }
+    .arrow-cell.cell-red   { background: #ffcdd2; }
+    .arrow-cell.cell-black { background: #eeeeee; }
 
+
+    .tag {
+      display: inline-block;
+      padding: 2px 6px;
+      margin: 1px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .tag-green  { background: #c8e6c9; }
+    .tag-yellow { background: #fff9c4; }
+    .tag-gray   { background: #eee; }
+    .tag-red    { background: #ffcdd2; }
   </style>
 </head>
 <body>
   <h1>🎴 游戏王CCB</h1>
+
+  <form method="POST" style="margin-bottom:1em;">
+    <label>题库：
+      <select name="mode">
+        <option value="monster" {% if mode =='monster' %}selected{% endif %}>
+          怪兽卡（无通常）
+        </option>
+        <option value="spell"   {% if mode =='spell'   %}selected{% endif %}>
+          魔法卡
+        </option>
+        <option value="trap"    {% if mode =='trap'    %}selected{% endif %}>
+          陷阱卡
+        </option>
+        <option value="hot"     {% if mode =='hot'     %}selected{% endif %}>
+          热门卡
+        </option>
+        <option value="all"     {% if mode =='all'     %}selected{% endif %}>
+          所有卡
+        </option>
+      </select>
+    </label>
+    <button type="submit" name="action" value="change_mode">切换题库</button>
+  </form>
+
 
   <!-- 历史猜测 -->
   {% if history %}
@@ -46,8 +111,8 @@
     <table>
       <thead>
         <tr>
-          <th>卡名</th><th>攻击</th><th>守备</th><th>等级</th><th>刻度</th>
-          <th>类型</th><th>属性</th><th>种族</th><th>效果标签</th>
+          <th>卡名</th><th>攻击</th><th>守备</th><th>等级</th><th>刻度</th><th>箭头</th>
+          <th>类型</th><th>属性</th><th>种族</th><th>效果标签</th><th>系列</th>
         </tr>
       </thead>
       <tbody>
@@ -58,10 +123,12 @@
           <td>{{ entry.compare['守备']|safe }}</td>
           <td>{{ entry.compare['等级']|safe }}</td>
           <td>{{ entry.compare['刻度']|safe }}</td>
+          <td>{{ entry.compare['箭头']|safe }}</td>
           <td style="white-space: nowrap;">{{ entry.compare['类型']|safe }}</td>
           <td style="white-space: nowrap;">{{ entry.compare['属性']|safe }}</td>
           <td style="white-space: nowrap;">{{ entry.compare['种族']|safe }}</td>
           <td style="white-space: nowrap;">{{ entry.compare['效果标签']|safe }}</td>
+          <td style="white-space: nowrap;">{{ entry.compare['系列']|safe }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -78,6 +145,14 @@
     <ul id="suggestions" hidden></ul>
   </form>
 
+  {% if hints %}
+    <div class="hint-box">
+      {% for h in hints %}
+        <p>{{ h }}</p>
+      {% endfor %}
+    </div>
+  {% endif %}
+
   <!-- 本次反馈 -->
   {% if feedback %}
     {% if feedback.error %}
@@ -87,9 +162,6 @@
     {% elif feedback.giveup %}
       <p style="color:blue; font-weight:bold;">💡 放弃了！正确答案是：{{ feedback.answer }}</p>
     {% elif feedback.compare %}
-      {% if feedback.hint %}
-        <p style="color:blue;">💡 提示：卡名中包含 “{{ feedback.hint }}” 这个字</p>
-      {% endif %}
       <h3>你猜的是：<strong>{{ feedback.guess_name }}</strong></h3>
       <table>
         <thead><tr><th>属性</th><th>结果</th></tr></thead>
