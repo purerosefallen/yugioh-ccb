@@ -163,28 +163,32 @@ def game():
     if not mode or 'target_id' not in session:
         return redirect(url_for("start"))
 
-    # 确保本局猜测计数与提示列表存在
-    if 'guess_count' not in session:
-        session['guess_count'] = 0
-        session['hints_shown'] = []
-
     filtered = filter_db(mode)
     target = db.loc[session['target_id']]
+
+    # 本局历史记录和提示
     history = session.get('history', [])
+    hints = session.get('hints', [])
+    hinted_chars = session.get('hinted_chars', [])
 
     if request.method == "POST":
         action = request.form.get("action", "guess")
 
         if action == "surrender":
-            # 投降：显示答案并清理本局
-            feedback = {"giveup": True, "answer": target["name"]}
-            for key in ('target_id', 'history', 'guess_count', 'hints_shown'):
-                session.pop(key, None)
+            # 认输
+            feedback = {"giveup": True, "answer": target["name"], "hints": hints}
+            session.pop('target_id', None)
+            session.pop('history', None)
+            session.pop('hints', None)
+            session.pop('hinted_chars', None)
 
         elif action == "restart":
-            # 重新开始：回到选择范围页
-            for key in ('target_id', 'mode', 'history', 'guess_count', 'hints_shown'):
-                session.pop(key, None)
+            # 重新开始
+            session.pop('target_id', None)
+            session.pop('mode', None)
+            session.pop('history', None)
+            session.pop('hints', None)
+            session.pop('hinted_chars', None)
             return redirect(url_for("start"))
 
         else:
@@ -193,44 +197,68 @@ def game():
             match = filtered[filtered["name"].str.contains(user_input, case=False, na=False)]
 
             if match.empty:
-                feedback = {"error": f"未找到包含“{user_input}”的卡片。"}
+                feedback = {"error": f"未找到包含“{user_input}”的卡片。", "hints": hints}
+
             else:
                 guess = match.iloc[0]
                 if guess.name == target.name:
-                    # 猜中：恭喜并清理本局
-                    feedback = {"success": f"🎉 恭喜你猜中了！答案就是【{guess['name']}】"}
-                    for key in ('target_id', 'history', 'guess_count', 'hints_shown'):
-                        session.pop(key, None)
+                    # 猜中
+                    feedback = {
+                        "success": f"🎉 恭喜你猜中了！答案就是【{guess['name']}】",
+                        "hints": hints
+                    }
+                    # 清理本局 session
+                    session.pop('target_id', None)
+                    session.pop('history', None)
+                    session.pop('hints', None)
+                    session.pop('hinted_chars', None)
 
                 else:
-                    # 有效一次猜测
-                    session['guess_count'] += 1
-                    # 在第2次和第5次时给提示
-                    if session['guess_count'] in (2, 5):
-                        name_chars = list(target['name'])
-                        shown = session['hints_shown']
-                        choices = [c for c in name_chars if c not in shown]
-                        if choices:
-                            hint_char = random.choice(choices)
-                            shown.append(hint_char)
-                            session['hints_shown'] = shown
-                            feedback = {"hint": hint_char}
-                    # 对比并存入 history
+                    # 对比并入历史
                     compare = compare_tags(card_to_tags(guess), card_to_tags(target))
-                    feedback = feedback or {}
-                    feedback.update({
-                        "compare": compare,
-                        "guess_name": guess['name']
-                    })
                     history.append({
                         "guess_name": guess['name'],
                         "compare": compare
                     })
+
+                    # —— 第二次猜测，给一个新的“效果标签”提示 —— #
+                    if len(history) == 2:
+                        target_tags = set(card_to_tags(target)["效果标签"])
+                        guessed_tags = set()
+                        for h in history:
+                            # history 里保存的 compare 里没有原始 list，
+                            # 所以直接重新取一次 guess 的原始标签：
+                            row = db[db["name"] == h["guess_name"]].iloc[0]
+                            guessed_tags |= set(card_to_tags(row)["效果标签"])
+                        remaining = list(target_tags - guessed_tags)
+                        if remaining:
+                            tag_hint = random.choice(remaining)
+                            hints.append(f"提示：目标卡有效果标签 “{tag_hint}”")
+
+                    # —— 第五次猜测，给一个新的名称字符提示 —— #
+                    if len(history) == 5:
+                        name_chars = [c for c in target["name"] if c.strip()]
+                        candidates = [c for c in name_chars if c not in hinted_chars]
+                        if candidates:
+                            char_hint = random.choice(candidates)
+                            hinted_chars.append(char_hint)
+                            hints.append(f"提示：目标卡名称中包含 “{char_hint}” 这个字")
+
+                    # 更新 session
                     session['history'] = history
+                    session['hints'] = hints
+                    session['hinted_chars'] = hinted_chars
+
+                    feedback = {
+                        "compare": compare,
+                        "guess_name": guess['name'],
+                        "hints": hints
+                    }
 
     return render_template("index.html",
                            feedback=feedback,
-                           history=history)
+                           history=history,
+                           hints=hints)
 
 @app.route("/suggest")
 def suggest():
