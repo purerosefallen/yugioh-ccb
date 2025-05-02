@@ -1,4 +1,9 @@
-# yugioh-ccb
+## yugioh-ccb
+
+本项目为灯一把——游戏王版。目前仅支持单人本地游玩。
+
+##部署指南
+
 
 Todo list：
 
