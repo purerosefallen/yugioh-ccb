@@ -4,4 +4,3 @@ Flask_SocketIO==5.5.1
 pandas==2.2.3
 redis==3.5.3
 Requests==2.32.3
-sqlite3
