@@ -3,8 +3,13 @@ import sqlite3
 import pandas as pd
 import random
 import numbers
+from pathlib import Path
+import sys, os
 
-app = Flask(__name__)
+base_path = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
+template_folder = os.path.join(base_path, "templates")
+
+app = Flask(__name__, template_folder=template_folder)
 db = None
 target_row = None
 app.secret_key = "你自己的随机 Secret Key"
@@ -44,11 +49,36 @@ def extract_arrows(def_value):
     return [sym for bit, sym in LINK_MARKERS.items() if def_value & bit]
 
 
-def load_card_database(path):
-    conn = sqlite3.connect(path)
-    # 先把两个表读进 DataFrame
+def load_card_database(path: str = None) -> pd.DataFrame:
+    """
+    加载 cards.cdb 里的 datas 和 texts 两张表，
+    合并、去重、按 id 排序后返回一个 DataFrame。
+
+    如果不传入 path，则自动：
+      · 在 PyInstaller 打包后的环境中，从 sys._MEIPASS 找到临时目录里的 cards.cdb
+      · 否则从当前脚本同级目录下加载 cards.cdb
+    """
+    # 1. 自动定位数据库文件
+    if path is None:
+        # PyInstaller 打包后会把数据放到 _MEIPASS 里
+        base = getattr(sys, "_MEIPASS", None)
+        if base is None:
+            # 普通脚本运行，数据库和脚本在同一个目录
+            base = Path(__file__).parent
+        else:
+            # 打包执行时，_MEIPASS 已经是一个 str 临时目录
+            base = Path(base)
+        db_file = base / "cards.cdb"
+    else:
+        db_file = Path(path)
+
+    if not db_file.exists():
+        raise FileNotFoundError(f"找不到数据库文件：{db_file}")
+
+    # 2. 连接并读取表
+    conn = sqlite3.connect(str(db_file))
     datas = pd.read_sql_query(
-        "SELECT id, type, atk, def, level, race, attribute, category ,hot,setcode FROM datas",
+        "SELECT id, type, atk, def, level, race, attribute, category, hot, setcode FROM datas",
         conn, index_col="id"
     )
     texts = pd.read_sql_query(
@@ -56,12 +86,15 @@ def load_card_database(path):
         conn, index_col="id"
     )
     conn.close()
-    # 合并
+
+    # 3. 合并去重并返回
     df = datas.join(texts, how="inner").reset_index()
-    # 按 id 升序排序，drop_duplicates 保留每个 name 的第一个（即最小 id）
-    df = df.sort_values("id").drop_duplicates(subset="name", keep="first")
-    # 以 id 重新设为索引
-    df = df.set_index("id")
+    df = (
+        df
+        .sort_values("id")
+        .drop_duplicates(subset="name", keep="first")
+        .set_index("id")
+    )
     return df
 
 def card_to_tags(row):
@@ -322,5 +355,5 @@ def suggest():
     return jsonify(matches)
 
 if __name__ == "__main__":
-    db = load_card_database("cards.cdb")
+    db = load_card_database()
     app.run(debug=True)
