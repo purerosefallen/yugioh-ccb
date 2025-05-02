@@ -13,9 +13,10 @@
 
 ## 部署指南
 
-pip install -r requirements.txt
-
-python guess_card_game.py
+   ```
+   pip install -r requirements.txt
+   python guess_card_game.py 
+   ```
 
 #浏览器打开
 
