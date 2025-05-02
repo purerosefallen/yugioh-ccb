@@ -33,7 +33,7 @@ def filter_db(mode):
     # all
     return db
 
-
+db = load_card_database()
 @app.route("/", methods=["GET", "POST"])
 def start():
     """游戏开始前，选择卡牌范围和猜测次数"""
@@ -233,7 +233,7 @@ def suggest():
 
 
 if __name__ == "__main__":
-    db = load_card_database()
+
     host = "0.0.0.0"
     port = int(os.environ.get("PORT", 5000))
 
