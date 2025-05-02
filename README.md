@@ -18,9 +18,7 @@
    python guess_card_game.py 
    ```
 
-#浏览器打开
-
-http://127.0.0.1:5000
+浏览器打开http://127.0.0.1:5000
 
 ## Todo list：
 
