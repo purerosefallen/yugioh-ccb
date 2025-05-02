@@ -1,10 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-import sqlite3
-import pandas as pd
+import os
 import random
-import numbers
-from pathlib import Path
-import sys, os
+import sys
+
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+
+from data_utils import load_card_database, card_to_tags, compare_tags
 
 base_path = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
 template_folder = os.path.join(base_path, "templates")
@@ -14,169 +14,6 @@ db = None
 target_row = None
 app.secret_key = "你自己的随机 Secret Key"
 
-from map import SETNAME_MAP,RACE_MAP,TYPE_MAP,CATEGORY_TAGS,TYPE_LINK,LINK_MARKERS,SETNAME_MAP ,ATTR_MAP
-
-def parse_flags(value, mapping):
-    return [name for bit, name in mapping.items() if value & bit]
-
-def parse_category(cat):
-    return [CATEGORY_TAGS[1100 + i] for i in range(64) if (cat >> i) & 1 and (1100 + i) in CATEGORY_TAGS]
-
-
-def parse_setcode(setcode, name_map):
-    # 1. 转成大写十六进制字符串
-    hex_str = f"{setcode:X}"
-    # 2. 左侧补零，使长度成为 4 的倍数
-    pad_len = (-len(hex_str)) % 4
-    if pad_len:
-        hex_str = hex_str.zfill(len(hex_str) + pad_len)
-    # 3. 每 4 位一组
-    names = []
-    for i in range(0, len(hex_str), 4):
-        segment = hex_str[i:i+4]
-        # 全 0 的段跳过
-        if segment == "0000":
-            continue
-        code = int(segment, 16)
-        if code in name_map:
-            names.append(name_map[code])
-    return names
-
-def extract_arrows(def_value):
-    """
-    从 link_marker 的整数值中提取出 所有 生效的箭头符号，返回一个列表。
-    """
-    return [sym for bit, sym in LINK_MARKERS.items() if def_value & bit]
-
-
-def load_card_database(path: str = None) -> pd.DataFrame:
-    """
-    加载 cards.cdb 里的 datas 和 texts 两张表，
-    合并、去重、按 id 排序后返回一个 DataFrame。
-
-    如果不传入 path，则自动：
-      · 在 PyInstaller 打包后的环境中，从 sys._MEIPASS 找到临时目录里的 cards.cdb
-      · 否则从当前脚本同级目录下加载 cards.cdb
-    """
-    # 1. 自动定位数据库文件
-    if path is None:
-        # PyInstaller 打包后会把数据放到 _MEIPASS 里
-        base = getattr(sys, "_MEIPASS", None)
-        if base is None:
-            # 普通脚本运行，数据库和脚本在同一个目录
-            base = Path(__file__).parent
-        else:
-            # 打包执行时，_MEIPASS 已经是一个 str 临时目录
-            base = Path(base)
-        db_file = base / "cards.cdb"
-    else:
-        db_file = Path(path)
-
-    if not db_file.exists():
-        raise FileNotFoundError(f"找不到数据库文件：{db_file}")
-
-    # 2. 连接并读取表
-    conn = sqlite3.connect(str(db_file))
-    datas = pd.read_sql_query(
-        "SELECT id, type, atk, def, level, race, attribute, category, hot, setcode FROM datas",
-        conn, index_col="id"
-    )
-    texts = pd.read_sql_query(
-        "SELECT id, name FROM texts",
-        conn, index_col="id"
-    )
-    conn.close()
-
-    # 3. 合并去重并返回
-    df = datas.join(texts, how="inner").reset_index()
-    df = (
-        df
-        .sort_values("id")
-        .drop_duplicates(subset="name", keep="first")
-        .set_index("id")
-    )
-    return df
-
-def card_to_tags(row):
-    is_link = bool(row["type"] & TYPE_LINK)
-    # 链接怪兽的“守备”清空
-    defense = "" if is_link else row["def"]
-    # 如果是链接怪兽，从 link_marker 提取箭头
-    arrows = extract_arrows(row["def"]) if is_link else []
-    return {
-        "卡名": row["name"],
-        "攻击": row["atk"],
-        "守备": defense,
-        "等级": row["level"] & 0xFF,
-        "箭头": arrows,
-        "刻度": (row["level"] >> 24) & 0xFF,
-        "类型": parse_flags(row["type"], TYPE_MAP),
-        "属性": ATTR_MAP.get(row["attribute"], f"0x{row['attribute']:X}"),
-        "种族": RACE_MAP.get(row["race"], f"0x{row['race']:X}"),
-        "效果标签": parse_category(row["category"]),
-        "系列": parse_setcode(row["setcode"], SETNAME_MAP),
-    }
-
-
-def compare_tags(guess_tags, answer_tags):
-    def cmp(key, val1, val2):
-        if val1 is None or val1 == "" or val2 is None or val2 == "":
-            # 要么是用户没猜，要么目标也无该字段，都算“未猜”
-            return '<span class="partial">—</span>'
-
-        if key == "箭头":
-            pills = []
-            # 对八个方向都展示一个小标签
-            for bit, sym in LINK_MARKERS.items():
-                if sym in val1:
-                    # 猜的里有
-                    cls = "tag-green" if sym in val2 else "tag-red"
-                else:
-                    # 猜的里没有
-                    cls = "tag-gray"
-                pills.append(f'<span class="tag {cls}">{sym}</span>')
-            return " ".join(pills)
-        # 数值型字段：攻击、守备、等级、刻度
-        if isinstance(val1, numbers.Number):
-            diff = abs(val1 - val2)
-            # 先判断完全相等
-            if diff == 0:
-                cls = "tag-green"
-            else:
-                if key in ("攻击", "守备"):
-                    if diff <= 500:
-                        cls = "tag-yellow"
-                    else:
-                        cls = "tag-gray"
-                elif key in ("等级", "刻度"):
-                    if diff <= 2:
-                        cls = "tag-yellow"
-                    else:
-                        cls = "tag-gray"
-                else:
-                    cls = "tag-gray"
-            # 箭头
-            arrow = "" if diff == 0 else ("↑" if val1 < val2 else "↓")
-            return f'<span class="tag {cls}">{val1}{arrow}</span>'
-
-        # 列表型字段：如 类型、效果标签……
-        elif isinstance(val1, list):
-            pills = []
-            for t in val1:
-                # 猜的 tag 在目标里才 green，否则 red
-                cls = "tag-green" if t in val2 else "tag-gray"
-                pills.append(f'<span class="tag {cls}">{t}</span>')
-            return " ".join(pills) or '<span class="tag tag-gray">—</span>'
-
-        # 其它（字符串等）完全匹配才 green，否则 gray
-        else:
-            cls = "tag-green" if val1 == val2 else "tag-gray    "
-            return f'<span class="tag {cls}">{val1}</span>'
-
-    return {
-        key: cmp(key, guess_tags[key], answer_tags[key])
-        for key in guess_tags
-    }
 
 def filter_db(mode):
     """
@@ -197,29 +34,41 @@ def filter_db(mode):
     return db
 
 
-
 @app.route("/", methods=["GET", "POST"])
 def start():
-    """游戏开始前，选择卡牌范围"""
+    """游戏开始前，选择卡牌范围和猜测次数"""
     if request.method == "POST":
-        mode = request.form.get("mode")
+        # 1. 读卡片类型
+        mode = request.form["mode"]
+
+        # 2. 读猜测次数（range 滑块传回的是字符串）
+        try:
+            max_attempts = int(request.form.get("attempts", 5))
+        except ValueError:
+            max_attempts = 5
+
+        # 3. 初始化 session
         session.clear()
-        session['mode'] = mode
-        # 随机选一个 target_id
+        session["mode"] = mode
+        session["max_attempts"] = max_attempts
+        session["guess_count"] = 0
+        session["hints_shown"] = []
+
+        # 4. 随机选一个目标卡片 ID
         pool = filter_db(mode)
-        session['target_id'] = int(pool.sample(1).index[0])
-        #session['target_id'] = 71818935
-        # 重置本局提示相关状态
-        session['guess_count'] = 0
-        session['hints_shown'] = []
+        session["target_id"] = int(pool.sample(1).index[0])
+
         return redirect(url_for("game"))
+
+    # GET：渲染 start.html（包含滑块）
     return render_template("start.html")
+
 
 @app.route("/game", methods=["GET", "POST"])
 def game():
     feedback = None
     mode = session.get('mode')
-    if not mode :
+    if not mode:
         return redirect(url_for("start"))
 
     if 'target_id' not in session:
@@ -228,6 +77,8 @@ def game():
         session['history'] = []
         session['hints'] = []
         session['hinted_chars'] = []
+    max_attempts = session.get('max_attempts', 5)
+    guess_count = session.get('guess_count', 0)
 
     filtered = filter_db(mode)
     target = db.loc[session['target_id']]
@@ -249,7 +100,15 @@ def game():
 
         if action == "surrender":
             # 认输
-            feedback = {"giveup": True, "answer": target["name"], "hints": hints}
+            # 1. 先做一次对比
+            compare = compare_tags(card_to_tags(target), card_to_tags(target))
+            # 2. 把这条全绿记录追加到本局历史
+            history.append({
+                "guess_name": target['name'],
+                "compare": compare
+            })
+            # 3. 带上 compare 和 hints 给模板渲染
+            feedback = {"giveup": True, "answer": target["name"], "compare": compare, "hints": hints}
             session.pop('target_id', None)
             session.pop('history', None)
             session.pop('hints', None)
@@ -266,6 +125,19 @@ def game():
 
         else:
             # 普通猜测
+            guess_count += 1
+            session['guess_count'] = guess_count
+
+            if guess_count > max_attempts:
+                feedback = {
+                    "error": "😢 猜测次数已用尽！",
+                    "giveup": True,
+                    "answer": target["name"],
+                    "hints": hints
+                }
+                for key in ('target_id', 'history', 'hints', 'hinted_chars', 'guess_count'):
+                    session.pop(key, None)
+
             user_input = request.form.get("guess", "").strip()
             match = filtered[filtered["name"].str.contains(user_input, case=False, na=False)]
 
@@ -336,11 +208,16 @@ def game():
                         "hints": hints
                     }
 
-    return render_template("index.html",
-                           feedback=feedback,
-                           history=history,
-                           hints=hints,
-                           mode=mode)
+    return render_template(
+        "index.html",
+        feedback=feedback,
+        history=history,
+        hints=hints,
+        mode=mode,
+        guess_count=guess_count,
+        max_attempts=max_attempts
+    )
+
 
 @app.route("/suggest")
 def suggest():
@@ -348,12 +225,16 @@ def suggest():
     if not q:
         return jsonify([])
     mode = session.get('mode', 'all')
-    pool = filter_db(mode)       # ← 改这里
+    pool = filter_db(mode)  # ← 改这里
     matches = pool[
         pool["name"].str.contains(q, case=False, na=False)
     ]["name"].tolist()
     return jsonify(matches)
 
+
 if __name__ == "__main__":
     db = load_card_database()
-    app.run(debug=True)
+    host = "0.0.0.0"
+    port = int(os.environ.get("PORT", 5000))
+
+    app.run(host=host, port=port, debug=False)
