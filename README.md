@@ -1,6 +1,8 @@
 ## yugioh-ccb
 
-本项目为灯一把——游戏王版。
+游戏王笑传之猜抽棒。
+
+![image](https://github.com/user-attachments/assets/75092bdb-71b0-4f9a-9b92-ebbb75654ea5)
 
 数据来源：ygopro,mycard.world
 
