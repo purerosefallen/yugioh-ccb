@@ -15,7 +15,7 @@
       height: 36px;
       border-radius: 50%;
       box-shadow: 0 0 4px rgba(0,0,0,0.3);
-
+    }
     .tag {
       display: inline-block;
       padding: 2px 8px;
@@ -91,12 +91,12 @@
   </style>
 </head>
 <body>
-  <h1>🎴 游戏王CCB</h1>
   <div class="github-link">
     <a href="https://github.com/EN1AK/yugioh-ccb" target="_blank" rel="noopener">
       <img src="https://avatars.githubusercontent.com/EN1AK" alt="GitHub">
     </a>
   </div>
+  <h1>🎴 游戏王CCB</h1>
   <form method="POST" style="margin-bottom:1em;">
     <label>题库：
       <select name="mode">
@@ -127,7 +127,7 @@
     <table>
       <thead>
         <tr>
-          <th>卡名</th><th>攻击</th><th>守备</th><th>等级</th><th>刻度</th><th>箭头</th>
+          <th>卡名</th><th>攻击</th><th>守备</th><th>等级/阶级</th><th>刻度</th><th>箭头</th>
           <th>类型</th><th>属性</th><th>种族</th><th>效果标签</th><th>系列</th>
         </tr>
       </thead>
@@ -137,7 +137,7 @@
           <td>{{ entry.guess_name }}</td>
           <td>{{ entry.compare['攻击']|safe }}</td>
           <td>{{ entry.compare['守备']|safe }}</td>
-          <td>{{ entry.compare['等级']|safe }}</td>
+          <td>{{ entry.compare['等级/阶级']|safe }}</td>
           <td>{{ entry.compare['刻度']|safe }}</td>
           <td>{{ entry.compare['箭头']|safe }}</td>
           <td style="white-space: nowrap;">{{ entry.compare['类型']|safe }}</td>

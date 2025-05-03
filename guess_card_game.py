@@ -14,6 +14,8 @@ db = None
 target_row = None
 app.secret_key = "你自己的随机 Secret Key"
 
+db = load_card_database()
+
 
 def filter_db(mode):
     """
@@ -33,7 +35,7 @@ def filter_db(mode):
     # all
     return db
 
-db = load_card_database()
+
 @app.route("/", methods=["GET", "POST"])
 def start():
     """游戏开始前，选择卡牌范围和猜测次数"""
@@ -130,13 +132,22 @@ def game():
 
             if guess_count > max_attempts:
                 feedback = {
-                    "error": "😢 猜测次数已用尽！",
+                    "error": f"😢 猜测次数已用尽！答案是【{target['name']}】",
                     "giveup": True,
                     "answer": target["name"],
                     "hints": hints
                 }
                 for key in ('target_id', 'history', 'hints', 'hinted_chars', 'guess_count'):
                     session.pop(key, None)
+                return render_template(
+                    "index.html",
+                    feedback=feedback,
+                    history=history,
+                    hints=hints,
+                    mode=mode,
+                    guess_count=guess_count,
+                    max_attempts=max_attempts
+                )
 
             user_input = request.form.get("guess", "").strip()
             match = filtered[filtered["name"].str.contains(user_input, case=False, na=False)]
@@ -225,7 +236,7 @@ def suggest():
     if not q:
         return jsonify([])
     mode = session.get('mode', 'all')
-    pool = filter_db(mode)  # ← 改这里
+    pool = filter_db(mode)
     matches = pool[
         pool["name"].str.contains(q, case=False, na=False)
     ]["name"].tolist()
@@ -233,7 +244,6 @@ def suggest():
 
 
 if __name__ == "__main__":
-
     host = "0.0.0.0"
     port = int(os.environ.get("PORT", 5000))
 

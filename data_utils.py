@@ -1,14 +1,14 @@
-
 import sqlite3
 import pandas as pd
 import numbers
 from pathlib import Path
 import sys
-from map import RACE_MAP,TYPE_MAP,CATEGORY_TAGS,TYPE_LINK,LINK_MARKERS,SETNAME_MAP ,ATTR_MAP
+from map import RACE_MAP, TYPE_MAP, CATEGORY_TAGS, TYPE_LINK, LINK_MARKERS, SETNAME_MAP, ATTR_MAP, TYPE_PENDULUM
 
 
 def parse_flags(value, mapping):
     return [name for bit, name in mapping.items() if value & bit]
+
 
 def parse_category(cat):
     return [CATEGORY_TAGS[1100 + i] for i in range(64) if (cat >> i) & 1 and (1100 + i) in CATEGORY_TAGS]
@@ -24,7 +24,7 @@ def parse_setcode(setcode, name_map):
     # 3. 每 4 位一组
     names = []
     for i in range(0, len(hex_str), 4):
-        segment = hex_str[i:i+4]
+        segment = hex_str[i:i + 4]
         # 全 0 的段跳过
         if segment == "0000":
             continue
@@ -32,6 +32,7 @@ def parse_setcode(setcode, name_map):
         if code in name_map:
             names.append(name_map[code])
     return names
+
 
 def extract_arrows(def_value):
     """
@@ -88,19 +89,22 @@ def load_card_database(path: str = None) -> pd.DataFrame:
     )
     return df
 
+
 def card_to_tags(row):
     is_link = bool(row["type"] & TYPE_LINK)
+    is_pendulum = bool(row["type"] & TYPE_PENDULUM)
     # 链接怪兽的“守备”清空
     defense = "" if is_link else row["def"]
-    # 如果是链接怪兽，从 link_marker 提取箭头
+
     arrows = extract_arrows(row["def"]) if is_link else []
+    scale = (row["level"] >> 24) & 0xFF if is_pendulum else ""
     return {
         "卡名": row["name"],
         "攻击": row["atk"],
         "守备": defense,
-        "等级": row["level"] & 0xFF,
+        "等级/阶级": row["level"] & 0xFF,
         "箭头": arrows,
-        "刻度": (row["level"] >> 24) & 0xFF,
+        "刻度":  scale,
         "类型": parse_flags(row["type"], TYPE_MAP),
         "属性": ATTR_MAP.get(row["attribute"], f"0x{row['attribute']:X}"),
         "种族": RACE_MAP.get(row["race"], f"0x{row['race']:X}"),
@@ -111,8 +115,10 @@ def card_to_tags(row):
 
 def compare_tags(guess_tags, answer_tags):
     def cmp(key, val1, val2):
-        if val1 is None or val1 == "" or val2 is None or val2 == "":
-            # 要么是用户没猜，要么目标也无该字段，都算“未猜”
+        if (val1 == "" or val1 is None) and (val2 == "" or val2 is None):
+            return '<span class="tag tag-gray">—</span>'
+            # 如果其中一个没——黄色“部分”
+        if val1 == "" or val1 is None or val2 == "" or val2 is None:
             return '<span class="partial">—</span>'
 
         if key == "箭头":
@@ -139,7 +145,7 @@ def compare_tags(guess_tags, answer_tags):
                         cls = "tag-yellow"
                     else:
                         cls = "tag-gray"
-                elif key in ("等级", "刻度"):
+                elif key in ("等级/阶级", "刻度"):
                     if diff <= 2:
                         cls = "tag-yellow"
                     else:
@@ -168,5 +174,3 @@ def compare_tags(guess_tags, answer_tags):
         key: cmp(key, guess_tags[key], answer_tags[key])
         for key in guess_tags
     }
-
-

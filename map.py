@@ -25,7 +25,7 @@ CATEGORY_TAGS = {
     1130: '超量相关', 1131: '效果无效'
 }
 TYPE_LINK = 0x4000000
-
+TYPE_PENDULUM = 0x1000000
 LINK_MARKERS = {
     0x040: "↖",  # TOP_LEFT
     0x080: "↑",  # TOP
