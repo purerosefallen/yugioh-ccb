@@ -1,6 +1,6 @@
 ## yugioh-ccb
 
-游戏王笑传之猜抽棒。
+游戏王笑传之猜抽棒
 
 ![image](https://github.com/user-attachments/assets/75092bdb-71b0-4f9a-9b92-ebbb75654ea5)
 
@@ -26,7 +26,7 @@
 
 ## Todo list：
 
-·为每张卡添加更多信息（初次发售年份，nw/md/简中/日文卡名，收录卡包，）
+·为每张卡添加更多信息（初次发售年份，nw/md/简中/日文卡名，收录卡包等）
 
 ·题库范围（泛用卡/妹卡等）
 
