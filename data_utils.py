@@ -137,10 +137,9 @@ def compare_tags(guess_tags, answer_tags):
         if (val1 == "" or val1 is None) and (val2 == "" or val2 is None):
             return '<span class="tag tag-gray">—</span>'
         if (val1 == "" or val1 is None) and (val2 != "" or val2 is not None):
-            num = val1
             return '<span class="tag tag-gray">—</span>'
         if (val1 != "" or val1 is not None) and (val2 == "" or val2 is None):
-            num = val2
+            num = val1
             return f'<span class="tag tag-gray">{num}</span>'
 
 
