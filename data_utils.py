@@ -3,7 +3,7 @@ import pandas as pd
 import numbers
 from pathlib import Path
 import sys
-from map import RACE_MAP, TYPE_MAP, CATEGORY_TAGS, TYPE_LINK, LINK_MARKERS, SETNAME_MAP, ATTR_MAP, TYPE_PENDULUM
+from map import RACE_MAP, TYPE_MAP, CATEGORY_TAGS, TYPE_LINK, LINK_MARKERS, SETNAME_MAP, ATTR_MAP, TYPE_PENDULUM,TYPE_MONSTER
 
 
 def parse_flags(value, mapping):
@@ -91,23 +91,42 @@ def load_card_database(path: str = None) -> pd.DataFrame:
 
 
 def card_to_tags(row):
+    type_names = parse_flags(row["type"], TYPE_MAP)
     is_link = bool(row["type"] & TYPE_LINK)
     is_pendulum = bool(row["type"] & TYPE_PENDULUM)
-    # 链接怪兽的“守备”清空
-    defense = "" if is_link else row["def"]
-
+    is_monster = bool(row["type"] & TYPE_MONSTER)
+    if not is_monster:
+        atk_val = ""
+        def_val = ""
+        level = ""
+        scale = ""
+        attr = ""
+        race = ""
+    else:
+        # 怪兽卡才处理 -2 → “？”
+        atk_val = "？" if row["atk"] == -2 else row["atk"]
+        # 链接怪兽没有守备，其它怪兽按 -2 转换
+        if is_link:
+            def_val = ""
+        else:
+            def_val = "？" if row["def"] == -2 else row["def"]
+        # 等级/阶级
+        level = row["level"] & 0xFF
+        # 刻度只有灵摆怪兽才有
+        scale = (row["level"] >> 24) & 0xFF if is_pendulum else ""
+        attr = ATTR_MAP.get(row["attribute"], f"0x{row['attribute']:X}")
+        race = RACE_MAP.get(row["race"], f"0x{row['race']:X}")
     arrows = extract_arrows(row["def"]) if is_link else []
-    scale = (row["level"] >> 24) & 0xFF if is_pendulum else ""
     return {
         "卡名": row["name"],
-        "攻击": row["atk"],
-        "守备": defense,
-        "等级/阶级": row["level"] & 0xFF,
+        "攻击": atk_val,
+        "守备": def_val,
+        "等级/阶级": level,
         "箭头": arrows,
-        "刻度":  scale,
-        "类型": parse_flags(row["type"], TYPE_MAP),
-        "属性": ATTR_MAP.get(row["attribute"], f"0x{row['attribute']:X}"),
-        "种族": RACE_MAP.get(row["race"], f"0x{row['race']:X}"),
+        "刻度": scale,
+        "类型": type_names,
+        "属性": attr,
+        "种族": race,
         "效果标签": parse_category(row["category"]),
         "系列": parse_setcode(row["setcode"], SETNAME_MAP),
     }
@@ -117,9 +136,14 @@ def compare_tags(guess_tags, answer_tags):
     def cmp(key, val1, val2):
         if (val1 == "" or val1 is None) and (val2 == "" or val2 is None):
             return '<span class="tag tag-gray">—</span>'
-            # 如果其中一个没——黄色“部分”
-        if val1 == "" or val1 is None or val2 == "" or val2 is None:
-            return '<span class="partial">—</span>'
+        if (val1 == "" or val1 is None) and (val2 != "" or val2 is not None):
+            num = val1
+            return '<span class="tag tag-gray">—</span>'
+        if (val1 != "" or val1 is not None) and (val2 == "" or val2 is None):
+            num = val2
+            return f'<span class="tag tag-gray">{num}</span>'
+
+
 
         if key == "箭头":
             pills = []
