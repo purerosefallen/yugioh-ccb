@@ -12,7 +12,7 @@ template_folder = os.path.join(base_path, "templates")
 app = Flask(__name__, template_folder=template_folder)
 db = None
 target_row = None
-app.secret_key = "你自己的随机 Secret Key"
+app.secret_key = os.getenv("SECRET_KEY", "你自己的随机 Secret Key")
 
 db = load_card_database()
 
